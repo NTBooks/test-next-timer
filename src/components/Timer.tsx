@@ -21,7 +21,6 @@ type Alarm = {
   name: string;
   dateTime: Date;
   sound: string;
-  isActive: boolean;
 };
 
 const currentDateTimeStr = () => {
@@ -130,7 +129,6 @@ const Timer = () => {
           name: data.timer.name,
           dateTime: new Date(data.timer.endTime),
           sound: "default",
-          isActive: true,
         };
         setAlarms((prev) => [...prev, newAlarm]);
       }
@@ -151,7 +149,7 @@ const Timer = () => {
       setCurrentTime(time);
 
       alarms.forEach((alarm) => {
-        if (alarm.isActive && alarm.dateTime.getTime() <= time.getTime()) {
+        if (alarm.dateTime.getTime() <= time.getTime() + 1000) {
           setActiveAlarm(alarm);
           setSelectedSound(alarm.sound);
           setIsAlarmPlaying(true);
@@ -170,12 +168,8 @@ const Timer = () => {
 
     stopFallbackAlarm();
 
-    // Mark the triggered alarm as inactive
-    setAlarms((prev) =>
-      prev.map((alarm) =>
-        alarm.dateTime <= currentTime ? { ...alarm, isActive: false } : alarm
-      )
-    );
+    // Remove triggered alarms from the history
+    setAlarms((prev) => prev.filter((alarm) => alarm.dateTime > currentTime));
   };
 
   const startTimer = (seconds: number) => {
@@ -187,7 +181,6 @@ const Timer = () => {
       name: "Timer",
       dateTime: futureTime,
       sound: timerSound,
-      isActive: true,
     };
 
     console.log("New alarm:", newAlarm);
@@ -216,7 +209,6 @@ const Timer = () => {
       name: newAlarmName,
       dateTime: new Date(newAlarmDateTime),
       sound: newAlarmSound,
-      isActive: true,
     };
 
     setAlarms((prev) => [...prev, newAlarm]);
@@ -322,7 +314,7 @@ const Timer = () => {
 
         {(isAlarmPlaying ||
           activeAlarm ||
-          alarms.some((a) => a.isActive && a.dateTime <= currentTime)) && (
+          alarms.some((a) => a.dateTime <= currentTime)) && (
           <div className="text-center">
             <button
               onClick={stopAlarm}
@@ -404,11 +396,11 @@ const Timer = () => {
                       </p>
                       <p
                         className={`text-sm ${
-                          alarm.isActive && alarm.dateTime > currentTime
+                          alarm.dateTime > currentTime
                             ? "text-green-400"
                             : "text-red-400"
                         }`}>
-                        {alarm.isActive && alarm.dateTime > currentTime
+                        {alarm.dateTime > currentTime
                           ? getTimeUntilAlarm(alarm.dateTime, currentTime)
                           : "Triggered"}
                       </p>
