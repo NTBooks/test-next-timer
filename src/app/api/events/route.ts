@@ -1,22 +1,24 @@
 // Store active event connections
 const activeConnections: Set<{
   controller: ReadableStreamDefaultController;
-  sendEvent: (data: any) => void;
+  sendEvent: (data: unknown) => void;
 }> = new Set();
 
 // Function to broadcast events to all connected clients
-export const broadcastEvent = (eventData: any) => {
+export const broadcastEvent = (eventData: { [key: string]: unknown }) => {
   for (const connection of activeConnections) {
     connection.sendEvent(eventData);
   }
 };
 
 // Update the GET function to use the shared connections
-export async function GET(req) {
+export async function GET(req: {
+  signal: { addEventListener: (arg0: string, arg1: () => void) => void };
+}) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      const sendEvent = (data: any) => {
+      const sendEvent = (data: unknown) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
       };
 

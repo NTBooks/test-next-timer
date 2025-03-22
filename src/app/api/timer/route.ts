@@ -12,9 +12,9 @@ type Alarm = {
   endTime: Date;
 };
 
-let timerList: Alarm[] = [];
+const timerList: Alarm[] = [];
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // If no time parameter, return current timer state
     return NextResponse.json(timerList);
@@ -60,17 +60,4 @@ export async function POST(request: Request) {
     console.error("Error in POST request:", error);
     return NextResponse.json({ error: "Failed to set timer" }, { status: 500 });
   }
-}
-
-export async function DELETE() {
-  if (activeTimer) {
-    clearTimeout(activeTimer);
-    activeTimer = null;
-    timerEndTime = null;
-    return NextResponse.json({
-      success: true,
-      message: "Timer stopped",
-    });
-  }
-  return NextResponse.json({ error: "No active timer" }, { status: 404 });
 }

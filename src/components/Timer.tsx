@@ -106,7 +106,13 @@ const Timer = () => {
         audioRefCache.currentTime = 0;
       }
     };
-  }, [isAlarmPlaying, selectedSound, activeAlarm]);
+  }, [
+    isAlarmPlaying,
+    selectedSound,
+    activeAlarm,
+    playFallbackAlarm,
+    stopFallbackAlarm,
+  ]);
 
   useEffect(() => {
     const eventSource = new EventSource("/api/events");
