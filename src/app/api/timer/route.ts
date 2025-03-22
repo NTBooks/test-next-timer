@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { broadcastEvent } from "../events/route";
+import { broadcastEvent } from "@/lib/eventBroadcaster";
 
 type Alarm = {
   id: string;

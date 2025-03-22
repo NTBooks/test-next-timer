@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { addConnection, removeConnection } from "@/lib/eventBroadcaster";
 
 // Store active event connections
 const activeConnections: Set<{
@@ -24,11 +25,11 @@ export async function GET(request: NextRequest) {
 
       // Add this connection to active connections
       const connection = { controller, sendEvent };
-      activeConnections.add(connection);
+      addConnection(connection);
 
       // Remove connection when client disconnects
       request.signal.addEventListener("abort", () => {
-        activeConnections.delete(connection);
+        removeConnection(connection);
         controller.close();
       });
     },
