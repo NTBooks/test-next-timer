@@ -109,6 +109,34 @@ const Timer = () => {
   }, [isAlarmPlaying, selectedSound, activeAlarm]);
 
   useEffect(() => {
+    const eventSource = new EventSource("/api/events");
+
+    eventSource.onmessage = (event) => {
+      console.log("Event received:", event);
+      const data = JSON.parse(event.data);
+      console.log("Parsed data:", data);
+
+      if (data.type === "NEW_TIMER") {
+        const newAlarm: Alarm = {
+          id: data.timer.id,
+          name: data.timer.name,
+          dateTime: new Date(data.timer.endTime),
+          sound: "default",
+          isActive: true,
+        };
+        setAlarms((prev) => [...prev, newAlarm]);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE connection error:", error);
+      eventSource.close();
+    };
+
+    return () => eventSource.close();
+  }, []);
+
+  useEffect(() => {
     // Update current time every second
     const timeInterval = setInterval(() => {
       const time = new Date();
@@ -204,6 +232,32 @@ const Timer = () => {
       stopAlarm();
     }
     handleDeleteAlarm(alarm.id);
+  };
+
+  const testAddTimer = async () => {
+    try {
+      const response = await fetch("/api/timer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Test Timer",
+          duration: 60,
+          sound: "beep",
+          isActive: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to add timer");
+      }
+
+      const data = await response.json();
+      console.log("Timer added:", data);
+    } catch (error) {
+      console.error("Error adding timer:", error);
+    }
   };
 
   return (
@@ -371,6 +425,14 @@ const Timer = () => {
         </div>
       </div>
       <audio ref={audioRef} src={`/mp3/${selectedSound}`} loop preload="auto" />
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">Alarms</h2>
+        <button
+          onClick={testAddTimer}
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mb-4">
+          Test Add Timer
+        </button>
+      </div>
     </div>
   );
 };
