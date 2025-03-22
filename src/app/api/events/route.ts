@@ -1,19 +1,6 @@
 import { NextRequest } from "next/server";
 import { addConnection, removeConnection } from "@/lib/eventBroadcaster";
 
-// Store active event connections
-const activeConnections: Set<{
-  controller: ReadableStreamDefaultController;
-  sendEvent: (data: unknown) => void;
-}> = new Set();
-
-// Function to broadcast events to all connected clients
-export const broadcastEvent = (eventData: { [key: string]: unknown }) => {
-  for (const connection of activeConnections) {
-    connection.sendEvent(eventData);
-  }
-};
-
 // Update the GET function to use the shared connections
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
