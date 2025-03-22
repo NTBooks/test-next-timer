@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+
 // Store active event connections
 const activeConnections: Set<{
   controller: ReadableStreamDefaultController;
@@ -12,9 +14,7 @@ export const broadcastEvent = (eventData: { [key: string]: unknown }) => {
 };
 
 // Update the GET function to use the shared connections
-export async function GET(req: {
-  signal: { addEventListener: (arg0: string, arg1: () => void) => void };
-}) {
+export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
@@ -27,7 +27,7 @@ export async function GET(req: {
       activeConnections.add(connection);
 
       // Remove connection when client disconnects
-      req.signal.addEventListener("abort", () => {
+      request.signal.addEventListener("abort", () => {
         activeConnections.delete(connection);
         controller.close();
       });
