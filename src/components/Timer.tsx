@@ -75,6 +75,8 @@ const Timer = () => {
   useEffect(() => {
     const audioRefCache = audioRef.current;
 
+    console.log("isAlarmPlaying", isAlarmPlaying);
+
     if (isAlarmPlaying) {
       console.log("Playing alarm with sound:", selectedSound);
 

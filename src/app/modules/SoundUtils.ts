@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 
 export const useFallbackAlarm = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -6,7 +6,7 @@ export const useFallbackAlarm = () => {
   const gainNodeRef = useRef<GainNode | null>(null);
   const patternTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const createAudioContext = () => {
+  const createAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       const AudioContext: typeof window.AudioContext | undefined =
         window.AudioContext ||
@@ -18,9 +18,9 @@ export const useFallbackAlarm = () => {
       audioContextRef.current = new AudioContext();
     }
     return audioContextRef.current;
-  };
+  }, []);
 
-  const playFallbackAlarm = () => {
+  const playFallbackAlarm = useCallback(() => {
     try {
       const audioContext = createAudioContext();
 
@@ -64,9 +64,9 @@ export const useFallbackAlarm = () => {
     } catch (error) {
       console.error("Error playing fallback alarm:", error);
     }
-  };
+  }, [createAudioContext]);
 
-  const stopFallbackAlarm = () => {
+  const stopFallbackAlarm = useCallback(() => {
     // Clear any pending timeouts
     if (patternTimeoutRef.current) {
       clearTimeout(patternTimeoutRef.current);
@@ -88,14 +88,14 @@ export const useFallbackAlarm = () => {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Cleanup function to stop alarm when component unmounts
     return () => {
       stopFallbackAlarm();
     };
-  }, []);
+  }, [stopFallbackAlarm]);
 
   return { playFallbackAlarm, stopFallbackAlarm };
 };
