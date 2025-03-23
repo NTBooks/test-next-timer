@@ -8,6 +8,10 @@ import {
   getTimeUntilAlarm,
   formatDateTime,
 } from "@/lib/dateUtils";
+import { SlidingPanel } from "./SlidingPanel";
+import { useClockName } from "@/app/modules/useClockName";
+import Clock from "./Clock";
+import DigitalClock from "./DigitalClock";
 
 declare global {
   interface Window {
@@ -22,6 +26,8 @@ type Alarm = {
   sound: string;
 };
 
+type ConnectionStatus = "connected" | "disconnected" | "connecting";
+
 const Timer = () => {
   const [duration, setDuration] = useState("");
   const [isAlarmPlaying, setIsAlarmPlaying] = useState(false);
@@ -35,9 +41,13 @@ const Timer = () => {
   const [newAlarmSound, setNewAlarmSound] = useState(ALARM_SOUNDS[0].value);
   const [activeAlarm, setActiveAlarm] = useState<Alarm | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const connectRef = useRef<(() => void) | null>(null);
   const { playFallbackAlarm, stopFallbackAlarm } = useFallbackAlarm();
+  const { clockName, updateClockName } = useClockName();
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>("connecting");
 
   useEffect(() => {
     if (activeAlarm) {
@@ -94,13 +104,24 @@ const Timer = () => {
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: NodeJS.Timeout;
+    let connectionCheckTimeout: NodeJS.Timeout;
 
     const connect = () => {
       if (eventSource) {
         eventSource.close();
       }
 
+      setConnectionStatus("connecting");
       eventSource = new EventSource("/api/events");
+
+      eventSource.onopen = () => {
+        console.log("SSE connection opened");
+        setConnectionStatus("connected");
+        // Clear any existing connection check timeout
+        if (connectionCheckTimeout) {
+          clearTimeout(connectionCheckTimeout);
+        }
+      };
 
       eventSource.onmessage = (event) => {
         console.log("Event received:", event);
@@ -120,12 +141,27 @@ const Timer = () => {
 
       eventSource.onerror = (error) => {
         console.error("SSE connection error:", error);
+        setConnectionStatus("disconnected");
         if (eventSource) {
           eventSource.close();
         }
         // Attempt to reconnect after 5 seconds
         reconnectTimeout = setTimeout(connect, 5000);
       };
+
+      // Set a timeout to check connection status after 5 seconds
+      connectionCheckTimeout = setTimeout(() => {
+        if (
+          connectionStatus === "connecting" ||
+          connectionStatus === "disconnected"
+        ) {
+          console.log("Connection check timeout - forcing reconnect");
+          if (eventSource) {
+            eventSource.close();
+          }
+          connect();
+        }
+      }, 5000);
     };
 
     connectRef.current = connect;
@@ -137,6 +173,9 @@ const Timer = () => {
       }
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+      }
+      if (connectionCheckTimeout) {
+        clearTimeout(connectionCheckTimeout);
       }
     };
   }, []);
@@ -177,7 +216,7 @@ const Timer = () => {
 
     const newAlarm: Alarm = {
       id: Date.now().toString(),
-      name: "Timer",
+      name: duration ? `Timer (${duration}s)` : `Timer (${seconds}s)`,
       dateTime: futureTime,
       sound: timerSound,
     };
@@ -201,17 +240,18 @@ const Timer = () => {
 
   const handleAddAlarm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAlarmName || !newAlarmDateTime) return;
+    if (!newAlarmDateTime) return;
 
+    const defaultName = `Alarm ${formatDateTime(new Date(newAlarmDateTime))}`;
     const newAlarm: Alarm = {
       id: Date.now().toString(),
-      name: newAlarmName,
+      name: newAlarmName || defaultName,
       dateTime: new Date(newAlarmDateTime),
       sound: newAlarmSound,
     };
 
     setAlarms((prev) => [...prev, newAlarm]);
-    setNewAlarmName("Alarm");
+    setNewAlarmName("");
     setNewAlarmDateTime("");
     setNewAlarmSound(ALARM_SOUNDS[0].value);
   };
@@ -244,7 +284,6 @@ const Timer = () => {
           name: "Test Timer",
           duration: 60,
           sound: "beep",
-          isActive: true,
         }),
       });
 
@@ -254,11 +293,6 @@ const Timer = () => {
 
       const data = await response.json();
       console.log("Timer added:", data);
-
-      // Force refresh the EventSource connection
-      if (connectRef.current) {
-        connectRef.current();
-      }
     } catch (error) {
       console.error("Error adding timer:", error);
     }
@@ -285,24 +319,76 @@ const Timer = () => {
           animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
       `}</style>
-      <div className="p-6 bg-gray-900 rounded-lg shadow-xl">
+
+      {/* Settings Button */}
+      <button
+        onClick={() => setIsPanelOpen(true)}
+        className="fixed right-0 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white p-3 rounded-l-lg shadow-lg hover:bg-gray-800 transition-colors z-30">
+        <svg
+          className="w-6 h-6"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          />
+        </svg>
+      </button>
+
+      {/* Sliding Panel */}
+      <SlidingPanel isOpen={isPanelOpen} onClose={() => setIsPanelOpen(false)}>
         <div className="space-y-6">
-          <div className="text-center">
-            <form
-              onSubmit={handleSubmit}
-              className="flex justify-center gap-4 mb-4">
+          {/* Clock Name Setting */}
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Clock Settings
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="clockName"
+                  className="block text-sm font-medium text-gray-300 mb-1">
+                  Clock Name
+                </label>
+                <input
+                  id="clockName"
+                  type="text"
+                  value={clockName}
+                  onChange={(e) => updateClockName(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  placeholder="Enter clock name"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Timer Form */}
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Quick Timer
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="number"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="Seconds"
                 min="1"
-                className="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
               <select
                 value={timerSound}
                 onChange={(e) => setTimerSound(e.target.value)}
-                className="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                 <option value="default">Default Sound</option>
                 {ALARM_SOUNDS.map((sound) => (
                   <option key={sound.value} value={sound.value}>
@@ -312,44 +398,35 @@ const Timer = () => {
               </select>
               <button
                 type="submit"
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                 Start Timer
               </button>
             </form>
 
-            <div className="flex justify-center gap-4">
+            <div className="flex gap-2 mt-4">
               <button
                 onClick={() => startTimer(60)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                 1 min
               </button>
               <button
                 onClick={() => startTimer(300)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                 5 min
               </button>
               <button
                 onClick={() => startTimer(600)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                 10 min
               </button>
             </div>
           </div>
 
-          {(isAlarmPlaying ||
-            activeAlarm ||
-            alarms.some((a) => a.dateTime <= currentTime)) && (
-            <div className="text-center">
-              <button
-                onClick={stopAlarm}
-                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                Stop Alarm
-              </button>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold text-white">Schedule Alarm</h3>
+          {/* Alarm Form */}
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-4">
+              Schedule Alarm
+            </h3>
             <form onSubmit={handleAddAlarm} className="space-y-4">
               <input
                 type="text"
@@ -358,98 +435,132 @@ const Timer = () => {
                 placeholder="Alarm Name"
                 className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
-              <div className="flex gap-4">
-                <input
-                  type="datetime-local"
-                  value={newAlarmDateTime}
-                  onChange={(e) => setNewAlarmDateTime(e.target.value)}
-                  className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
-                <select
-                  value={newAlarmSound}
-                  onChange={(e) => setNewAlarmSound(e.target.value)}
-                  className="px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                  {ALARM_SOUNDS.map((sound) => (
-                    <option key={sound.value} value={sound.value}>
-                      {sound.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                  Schedule
-                </button>
-              </div>
+              <input
+                type="datetime-local"
+                value={newAlarmDateTime}
+                onChange={(e) => setNewAlarmDateTime(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              />
+              <select
+                value={newAlarmSound}
+                onChange={(e) => setNewAlarmSound(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                {ALARM_SOUNDS.map((sound) => (
+                  <option key={sound.value} value={sound.value}>
+                    {sound.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                Schedule
+              </button>
             </form>
-
-            {activeAlarm && (
-              <div className="p-4 bg-indigo-900/50 rounded-lg">
-                <h3 className="font-bold text-white">Active Alarm</h3>
-                <p className="text-gray-300">Name: {activeAlarm.name}</p>
-                <p className="text-gray-300">
-                  Time: {formatDateTime(activeAlarm.dateTime)}
-                </p>
-                <p className="text-gray-300">
-                  Sound:{" "}
-                  {
-                    ALARM_SOUNDS.find((s) => s.value === activeAlarm.sound)
-                      ?.label
-                  }
-                </p>
-              </div>
-            )}
-
-            {alarms.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Scheduled Alarms
-                </h3>
-                <ul className="space-y-2">
-                  {alarms.map((alarm) => (
-                    <li
-                      key={alarm.id}
-                      className="flex justify-between items-center p-3 bg-gray-800 text-white rounded-lg">
-                      <div>
-                        <h4 className="font-semibold">{alarm.name}</h4>
-                        <p className="text-sm text-gray-400">
-                          {formatDateTime(alarm.dateTime)}
-                        </p>
-                        <p className="text-sm text-gray-400">
-                          {
-                            ALARM_SOUNDS.find((s) => s.value === alarm.sound)
-                              ?.label
-                          }
-                        </p>
-                        <p
-                          className={`text-sm ${
-                            alarm.dateTime > currentTime
-                              ? "text-green-400"
-                              : "text-red-400"
-                          }`}>
-                          {alarm.dateTime > currentTime
-                            ? getTimeUntilAlarm(alarm.dateTime, currentTime)
-                            : "Triggered"}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditAlarm(alarm)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAlarm(alarm.id)}
-                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
+        </div>
+      </SlidingPanel>
+
+      <div
+        className="flex flex-col items-center justify-center gap-4"
+        onClick={() => {
+          if (
+            isAlarmPlaying ||
+            activeAlarm ||
+            alarms.some((a) => a.dateTime <= currentTime)
+          ) {
+            stopAlarm();
+          }
+        }}>
+        <Clock />
+        <DigitalClock />
+      </div>
+
+      {/* Main Content */}
+      <div className="p-6 bg-gray-900 rounded-lg shadow-xl cursor-pointer max-w-4xl mx-auto w-full">
+        <div className="space-y-6">
+          <h1 className="text-3xl font-bold text-white text-center">
+            {clockName}
+          </h1>
+
+          {(isAlarmPlaying ||
+            activeAlarm ||
+            alarms.some((a) => a.dateTime <= currentTime)) && (
+            <div className="text-center">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  stopAlarm();
+                }}
+                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                Stop Alarm
+              </button>
+            </div>
+          )}
+
+          {activeAlarm && (
+            <div className="p-4 bg-indigo-900/50 rounded-lg">
+              <h3 className="font-bold text-white">Active Alarm</h3>
+              <p className="text-gray-300">Name: {activeAlarm.name}</p>
+              <p className="text-gray-300">
+                Time: {formatDateTime(activeAlarm.dateTime)}
+              </p>
+              <p className="text-gray-300">
+                Sound:{" "}
+                {ALARM_SOUNDS.find((s) => s.value === activeAlarm.sound)?.label}
+              </p>
+            </div>
+          )}
+
+          {alarms.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Scheduled Alarms
+              </h3>
+              <ul className="space-y-2">
+                {alarms.map((alarm) => (
+                  <li
+                    key={alarm.id}
+                    className="flex justify-between items-center p-3 bg-gray-800 text-white rounded-lg">
+                    <div className="flex-1">
+                      <h4 className="font-semibold">{alarm.name}</h4>
+                      <p className="text-sm text-gray-400">
+                        {formatDateTime(alarm.dateTime)}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {
+                          ALARM_SOUNDS.find((s) => s.value === alarm.sound)
+                            ?.label
+                        }
+                      </p>
+                      <p
+                        className={`text-sm ${
+                          alarm.dateTime > currentTime
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}>
+                        {alarm.dateTime > currentTime
+                          ? getTimeUntilAlarm(alarm.dateTime, currentTime)
+                          : "Triggered"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => handleEditAlarm(alarm)}
+                        className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAlarm(alarm.id)}
+                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
       <audio ref={audioRef} src={`/mp3/${selectedSound}`} loop preload="auto" />
@@ -460,6 +571,20 @@ const Timer = () => {
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mb-4">
           Test Add Timer
         </button>
+      </div>
+
+      {/* Connection Status Indicator */}
+      <div className="fixed top-4 right-4 z-50">
+        <div
+          className={`w-4 h-4 rounded-full ${
+            connectionStatus === "connected"
+              ? "bg-green-500"
+              : connectionStatus === "connecting"
+              ? "bg-yellow-500"
+              : "bg-red-500"
+          }`}
+          title={`Connection Status: ${connectionStatus}`}
+        />
       </div>
     </>
   );

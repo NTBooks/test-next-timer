@@ -14,6 +14,14 @@ export async function GET(request: NextRequest) {
       const connection = { controller, sendEvent };
       addConnection(connection);
 
+      // when a connection is added, send the current alarms to the client after 1 second
+      setTimeout(() => {
+        sendEvent({
+          type: "welcome",
+          message: "Welcome to the event stream",
+        });
+      }, 1000);
+
       // Remove connection when client disconnects
       request.signal.addEventListener("abort", () => {
         removeConnection(connection);
